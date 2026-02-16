@@ -1,0 +1,55 @@
+name: Snowflake CI-CD Pipeline
+
+# 1. Trigger the workflow on push to dev or main branches
+on:
+  push:
+    branches:
+      - dev
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 2. Download the code from your repo
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 3. Install Python (needed for schemachange)
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # 4. Install the deployment tool
+      - name: Install schemachange
+        run: pip install schemachange
+
+      # 5. Run the Deployment
+      - name: Deploy to Snowflake
+        env:
+          # Use the secrets you saved in GitHub Settings
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ROLE: "GITHUB_ACTIONS_ROLE"
+          SNOWFLAKE_WAREHOUSE: "DEPLOY_WH"
+        run: |
+          # LOGIC: Select Database based on Branch
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            TARGET_DB="DATA_PROD"
+            echo "Deploying to PRODUCTION..."
+          else
+            TARGET_DB="DATA_DEV"
+            echo "Deploying to DEVELOPMENT..."
+          fi
+
+          # EXECUTION: Run schemachange
+          schemachange -f ./migrations \
+            -a $SNOWFLAKE_ACCOUNT \
+            -u $SNOWFLAKE_USER \
+            -r $SNOWFLAKE_ROLE \
+            -w $SNOWFLAKE_WAREHOUSE \
+            -d $TARGET_DB \
+            --config-env-vars '{"SNOWFLAKE_PASSWORD": "'"$SNOWFLAKE_PASSWORD"'"}'
